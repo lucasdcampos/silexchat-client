@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import type { User } from '../models/user';
+import { ParsedMessage } from '../components/ParsedMessage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -91,7 +92,7 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
                 ? 'bg-indigo-600 self-end rounded-br-none' 
                 : 'bg-gray-700 self-start rounded-bl-none'
             }`}>
-                <p className="text-white text-sm break-words">{msg.content}</p>
+                <ParsedMessage text={msg.content} />
                 <p className={`text-xs mt-1 text-right ${
                     msg.senderId === currentUser.id 
                     ? 'text-indigo-200' 

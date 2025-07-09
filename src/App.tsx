@@ -13,10 +13,11 @@ export interface User {
   username: string;
 }
 
-interface Message {
+interface MessageWithSender {
   senderId: number;
   content: string;
   createdAt: string;
+  sender: User; 
 }
 
 export default function App() {
@@ -27,15 +28,10 @@ export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
 
-  const updateConversationOrder = (partnerId: number) => {
+  const updateConversationOrder = (partner: User) => {
     setConversations(prev => {
-      const convIndex = prev.findIndex(c => c.id === partnerId);
-      if (convIndex === -1) return prev; 
-      
-      const conversationToMove = prev[convIndex];
-      const restOfConversations = prev.filter(c => c.id !== partnerId);
-      
-      return [conversationToMove, ...restOfConversations];
+      const filtered = prev.filter(c => c.id !== partner.id);
+      return [partner, ...filtered];
     });
   };
 
@@ -53,8 +49,8 @@ export default function App() {
       const newSocket = io(API_URL, { auth: { token } });
       setSocket(newSocket);
 
-      newSocket.on('privateMessage', (message: Message) => {
-        updateConversationOrder(message.senderId);
+      newSocket.on('privateMessage', (message: MessageWithSender) => {
+        updateConversationOrder(message.sender);
       });
 
       const fetchConversations = async () => {
@@ -96,6 +92,29 @@ export default function App() {
       setConversations(prev => [user, ...prev]);
     }
   };
+  
+  const handleHideConversation = async (partnerId: number) => {
+    const token = localStorage.getItem('silex_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/users/conversations/${partnerId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setConversations(prev => prev.filter(c => c.id !== partnerId));
+        if (selectedConversation?.id === partnerId) {
+          setSelectedConversation(null);
+        }
+      } else {
+        console.error("Failed to hide conversation on server");
+      }
+    } catch (error) {
+      console.error("Error hiding conversation:", error);
+    }
+  };
 
   const handleCloseConversation = () => {
     setSelectedConversation(null);
@@ -114,6 +133,7 @@ export default function App() {
         selectedConversationId={selectedConversation?.id}
         onNewChat={() => setIsModalOpen(true)}
         onLogout={handleLogout}
+        onHideConversation={handleHideConversation}
       />
       <main className="flex-1 flex flex-col">
         {selectedConversation ? (
@@ -122,7 +142,7 @@ export default function App() {
             currentUser={currentUser!}
             conversationUser={selectedConversation}
             socket={socket}
-            onNewMessageSent={() => updateConversationOrder(selectedConversation.id)}
+            onNewMessageSent={() => updateConversationOrder(selectedConversation)}
             onClose={handleCloseConversation}
           />
         ) : (

@@ -33,9 +33,10 @@ interface ChatViewProps {
   socket: Socket | null;
   onNewMessageSent: () => void;
   onClose: () => void;
+  onOpenProfile: (user: User) => void;
 }
 
-export function ChatView({ currentUser, conversationUser, socket, onNewMessageSent, onClose }: ChatViewProps) {
+export function ChatView({ currentUser, conversationUser, socket, onNewMessageSent, onClose, onOpenProfile }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
@@ -138,10 +139,10 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
   return (
     <>
       <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <div className="flex items-center gap-3">
+        <button onClick={() => onOpenProfile(conversationUser)} className="flex items-center gap-3 p-1 rounded-md hover:bg-gray-700">
           <Avatar avatarUrl={conversationUser.avatarUrl} username={conversationUser.username} />
           <h2 className="text-xl font-semibold">{conversationUser.username}</h2>
-        </div>
+        </button>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors">
           <XIcon className="h-5 w-5" />
         </button>

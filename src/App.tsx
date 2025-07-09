@@ -7,6 +7,7 @@ import { NewChatModal } from './views/NewChatModal';
 import { io, type Socket } from 'socket.io-client';
 import type { User, Conversation } from './models/user';
 import { SettingsModal } from './views/SettingsModal';
+import { ProfileModal } from './views/ProfileModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -24,8 +25,17 @@ export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // Novo estado
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [profileModalUser, setProfileModalUser] = useState<User | null>(null); 
   const [socket, setSocket] = useState<Socket | null>(null);
+
+  const handleOpenProfile = (user: User) => {
+    setProfileModalUser(user);
+  };
+
+  const handleCloseProfile = () => {
+    setProfileModalUser(null);
+  };
 
   const selectedConversationRef = useRef<Conversation | null>(null);
   useEffect(() => {
@@ -173,6 +183,7 @@ export default function App() {
         onLogout={handleLogout}
         onHideConversation={handleHideConversation}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenProfile={handleOpenProfile}
       />
       <main className="flex-1 flex flex-col">
         {selectedConversation ? (
@@ -183,6 +194,7 @@ export default function App() {
             socket={socket}
             onNewMessageSent={() => updateConversationOrder(selectedConversation)}
             onClose={handleCloseConversation}
+            onOpenProfile={handleOpenProfile}
           />
         ) : (
           <WelcomeView />
@@ -201,6 +213,10 @@ export default function App() {
           onUpdateSuccess={handleUpdateUser}
         />
       )}
+      <ProfileModal 
+        user={profileModalUser}
+        onClose={handleCloseProfile}
+      />
     </div>
   );
 }

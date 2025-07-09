@@ -41,7 +41,7 @@ export function NewChatModal({ isOpen, onClose, onStartChat }: NewChatModalProps
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
         <h2 className="text-xl font-bold mb-4">Start a new conversation</h2>
         <form onSubmit={handleSubmit}>

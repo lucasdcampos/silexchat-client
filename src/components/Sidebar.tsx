@@ -24,9 +24,10 @@ interface SidebarProps {
   onLogout: () => void;
   onHideConversation: (partnerId: number) => void;
   onOpenSettings: () => void;
+  onOpenProfile: (user: User) => void;
 }
 
-export function Sidebar({ currentUser, conversations, onSelectConversation, selectedConversationId, onNewChat, onLogout, onHideConversation, onOpenSettings }: SidebarProps) {
+export function Sidebar({ currentUser, conversations, onSelectConversation, selectedConversationId, onNewChat, onLogout, onHideConversation, onOpenSettings, onOpenProfile }: SidebarProps) {
   return (
     <aside className="w-80 bg-gray-800 flex flex-col p-3">
       <button onClick={onNewChat} className="w-full py-2 mb-4 text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors">
@@ -64,10 +65,10 @@ export function Sidebar({ currentUser, conversations, onSelectConversation, sele
       <div className="pt-2 border-t border-gray-700">
         <div className="flex items-center justify-between gap-3">
           {currentUser && (
-            <div className="flex items-center gap-3 flex-1 truncate">
+            <button onClick={() => onOpenProfile(currentUser)} className="flex items-center gap-3 flex-1 truncate p-1 rounded-md hover:bg-gray-700">
               <Avatar avatarUrl={currentUser.avatarUrl} username={currentUser.username} />
               <span className="font-semibold truncate">{currentUser.username}</span>
-            </div>
+            </button>
           )}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button onClick={onOpenSettings} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors">

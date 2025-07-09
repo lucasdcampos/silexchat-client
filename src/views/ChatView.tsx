@@ -187,7 +187,9 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
                       : 'bg-gray-700 rounded-bl-none'
                   }`}>
                       <div className="flex items-end gap-2">
-                        <ParsedMessage text={msg.content} />
+                        <div className="min-w-0">
+                          <ParsedMessage text={msg.content} />
+                        </div>
                         <span className={`text-xs flex-shrink-0 pb-0.5 ${
                             isSender ? 'text-indigo-200' : 'text-gray-400'
                         }`}>

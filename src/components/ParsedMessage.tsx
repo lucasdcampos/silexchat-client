@@ -1,5 +1,3 @@
-import Emoji from 'react-easy-emoji';
-
 interface ParsedMessageProps {
   text: string;
 }

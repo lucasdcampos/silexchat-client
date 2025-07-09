@@ -1,42 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChatView } from './views/ChatView';
 import { Sidebar } from './components/Sidebar';
 import { AuthPage } from './pages/AuthPage';
 import { WelcomeView } from './views/WelcomeView';
 import { NewChatModal } from './views/NewChatModal';
 import { io, type Socket } from 'socket.io-client';
+import type { User, Conversation } from './models/user';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export interface User {
-  id: number;
-  username: string;
-}
-
-interface Message {
+interface MessageWithSender {
   id: number;
   senderId: number;
   content: string;
   createdAt: string;
+  sender: User; 
 }
-
-interface MessageWithSender extends Message {
-    sender: User;
-}
-
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('silex_token'));
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [conversations, setConversations] = useState<User[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<User | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
 
+  const selectedConversationRef = useRef<Conversation | null>(null);
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation;
+  }, [selectedConversation]);
+
   const updateConversationOrder = (partner: User) => {
     setConversations(prev => {
-      const filtered = prev.filter(c => c.id !== partner.id);
-      return [partner, ...filtered];
+      const convIndex = prev.findIndex(c => c.id === partner.id);
+      let conversationToMove: Conversation;
+
+      if (convIndex !== -1) {
+        conversationToMove = { ...prev[convIndex], ...partner };
+      } else {
+        conversationToMove = { ...partner, unreadCount: 0 };
+      }
+      
+      const restOfConversations = prev.filter(c => c.id !== partner.id);
+      return [conversationToMove, ...restOfConversations];
     });
   };
 
@@ -45,7 +51,7 @@ export default function App() {
     if (isAuthenticated && token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setCurrentUser({ id: payload.id, username: payload.username });
+        setCurrentUser({ id: payload.id, username: payload.username, avatarUrl: payload.avatarUrl });
       } catch (e) {
         handleLogout();
         return;
@@ -55,6 +61,13 @@ export default function App() {
       setSocket(newSocket);
 
       newSocket.on('privateMessage', (message: MessageWithSender) => {
+        if (selectedConversationRef.current?.id !== message.sender.id) {
+          setConversations(prev => prev.map(c => 
+            c.id === message.sender.id 
+              ? { ...c, unreadCount: (c.unreadCount || 0) + 1 } 
+              : c
+          ));
+        }
         updateConversationOrder(message.sender);
       });
 
@@ -91,10 +104,22 @@ export default function App() {
     setConversations([]);
   };
 
-  const handleSelectConversation = (user: User) => {
-    setSelectedConversation(user);
+  const handleSelectConversation = (user: Conversation) => {
+    const token = localStorage.getItem('silex_token');
+    if (token && user.unreadCount > 0) {
+      fetch(`${API_URL}/api/messages/conversation/${user.id}/read`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      }).catch(err => console.error("Failed to mark as read:", err));
+    }
+
+    setSelectedConversation({ ...user, unreadCount: 0 });
+    setConversations(prev => prev.map(c => 
+      c.id === user.id ? { ...c, unreadCount: 0 } : c
+    ));
+    
     if (!conversations.find(c => c.id === user.id)) {
-      setConversations(prev => [user, ...prev]);
+      setConversations(prev => [{ ...user, unreadCount: 0 }, ...prev]);
     }
   };
   

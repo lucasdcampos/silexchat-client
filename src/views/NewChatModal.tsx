@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import type { User } from '../models/user';
-
-const API_URL = import.meta.env.VITE_API_URL;
+import type { Conversation, User } from '../models/user';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface NewChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStartChat: (user: User) => void;
+  onStartChat: (user: Conversation) => void;
 }
 
 export function NewChatModal({ isOpen, onClose, onStartChat }: NewChatModalProps) {
@@ -30,7 +29,7 @@ export function NewChatModal({ isOpen, onClose, onStartChat }: NewChatModalProps
     e.preventDefault();
     const targetUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
     if (targetUser) {
-      onStartChat(targetUser);
+      onStartChat({ ...targetUser, unreadCount: 0 });
       onClose();
       setUsername('');
       setError('');

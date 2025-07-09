@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
-import type { User } from '../models/user';
+import type { Conversation, User } from '../models/user';
 import { ParsedMessage } from '../components/ParsedMessage';
 import { MessageActions } from '../MessageActions';
+import { Avatar } from '../components/Avatar';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -28,7 +29,7 @@ interface Message {
 
 interface ChatViewProps {
   currentUser: User;
-  conversationUser: User;
+  conversationUser: Conversation;
   socket: Socket | null;
   onNewMessageSent: () => void;
   onClose: () => void;
@@ -75,6 +76,7 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
         console.error('Failed to fetch chat history', error);
       }
     };
+    
     fetchHistory();
 
     return () => {
@@ -105,7 +107,6 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
   };
 
   const handleCopyId = (id: number) => {
-    // Não copia IDs temporários (negativos)
     if (id > 0) {
         navigator.clipboard.writeText(id.toString());
     }
@@ -113,7 +114,6 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
   };
 
   const handleDelete = async (id: number) => {
-    // Não permite deletar mensagens que ainda não foram confirmadas pelo servidor
     if (id < 0) {
         setActiveMenu(null);
         return;
@@ -138,7 +138,10 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
   return (
     <>
       <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <h2 className="text-xl font-semibold">{conversationUser.username}</h2>
+        <div className="flex items-center gap-3">
+          <Avatar avatarUrl={conversationUser.avatarUrl} username={conversationUser.username} />
+          <h2 className="text-xl font-semibold">{conversationUser.username}</h2>
+        </div>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors">
           <XIcon className="h-5 w-5" />
         </button>

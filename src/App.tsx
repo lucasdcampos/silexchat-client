@@ -6,6 +6,7 @@ import { WelcomeView } from './views/WelcomeView';
 import { NewChatModal } from './views/NewChatModal';
 import { io, type Socket } from 'socket.io-client';
 import type { User, Conversation } from './models/user';
+import { SettingsModal } from './views/SettingsModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -22,7 +23,8 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false); // Novo estado
   const [socket, setSocket] = useState<Socket | null>(null);
 
   const selectedConversationRef = useRef<Conversation | null>(null);
@@ -149,6 +151,12 @@ export default function App() {
   const handleCloseConversation = () => {
     setSelectedConversation(null);
   };
+  
+  const handleUpdateUser = (updatedUser: User, newToken: string) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('silex_token', newToken);
+    setConversations(prev => prev.map(c => c.id === updatedUser.id ? { ...c, ...updatedUser } : c));
+  };
 
   if (!isAuthenticated) {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
@@ -161,9 +169,10 @@ export default function App() {
         conversations={conversations}
         onSelectConversation={handleSelectConversation}
         selectedConversationId={selectedConversation?.id}
-        onNewChat={() => setIsModalOpen(true)}
+        onNewChat={() => setIsNewChatModalOpen(true)}
         onLogout={handleLogout}
         onHideConversation={handleHideConversation}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
       />
       <main className="flex-1 flex flex-col">
         {selectedConversation ? (
@@ -180,10 +189,18 @@ export default function App() {
         )}
       </main>
       <NewChatModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isNewChatModalOpen}
+        onClose={() => setIsNewChatModalOpen(false)}
         onStartChat={handleSelectConversation}
       />
+      {currentUser && (
+        <SettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          currentUser={currentUser}
+          onUpdateSuccess={handleUpdateUser}
+        />
+      )}
     </div>
   );
 }

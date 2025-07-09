@@ -1,12 +1,12 @@
 interface AvatarProps {
   avatarUrl?: string | null;
   username?: string | null;
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
 }
 
 export function Avatar({ avatarUrl, username, size = 'md' }: AvatarProps) {
-  const sizeClasses = size === 'md' ? 'h-9 w-9' : 'h-8 w-8';
-  const textSize = size === 'md' ? 'text-base' : 'text-sm';
+  const sizeClasses = size === 'md' ? 'h-11 w-11' : size == 'lg' ? 'h-20 w-20' : 'h-9 w-9';
+  const textSize = size === 'md' ? 'text-base' : size == 'lg'? 'text-lg' : 'text-sm';
 
   if (avatarUrl) {
     return (

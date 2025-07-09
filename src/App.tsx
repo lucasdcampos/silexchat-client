@@ -13,12 +13,17 @@ export interface User {
   username: string;
 }
 
-interface MessageWithSender {
+interface Message {
+  id: number;
   senderId: number;
   content: string;
   createdAt: string;
-  sender: User; 
 }
+
+interface MessageWithSender extends Message {
+    sender: User;
+}
+
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('silex_token'));

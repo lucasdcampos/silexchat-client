@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import type { User } from '../models/user';
 import { ParsedMessage } from '../components/ParsedMessage';
+import { MessageActions } from '../MessageActions';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -12,7 +13,14 @@ const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
     </svg>
 );
 
+const ChevronDownIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
+
 interface Message {
+  id: number;
   senderId: number;
   content: string;
   createdAt: string;
@@ -29,18 +37,31 @@ interface ChatViewProps {
 export function ChatView({ currentUser, conversationUser, socket, onNewMessageSent, onClose }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [activeMenu, setActiveMenu] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!socket) return;
 
-    const handlePrivateMessage = (message: Message) => {
+    const handlePrivateMessage = (message: Message & { sender: User }) => {
       if (message.senderId === conversationUser.id) {
         setMessages(prev => [...prev, message]);
       }
     };
+
+    const handleMessageDeleted = ({ messageId }: { messageId: number }) => {
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    };
+
+    const handleMessageConfirmed = ({ tempId, message }: { tempId: number, message: Message }) => {
+      setMessages(prev => 
+        prev.map(m => (m.id === tempId ? message : m))
+      );
+    };
     
     socket.on('privateMessage', handlePrivateMessage);
+    socket.on('messageDeleted', handleMessageDeleted);
+    socket.on('messageConfirmed', handleMessageConfirmed);
 
     const fetchHistory = async () => {
       const token = localStorage.getItem('silex_token');
@@ -58,6 +79,8 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
 
     return () => {
       socket.off('privateMessage', handlePrivateMessage);
+      socket.off('messageDeleted', handleMessageDeleted);
+      socket.off('messageConfirmed', handleMessageConfirmed);
     };
   }, [conversationUser.id, socket]);
   
@@ -68,12 +91,48 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (newMessage.trim() && socket) {
-      const payload = { recipientId: conversationUser.id, content: newMessage };
+      const tempId = -Math.random();
+      const payload = { 
+        recipientId: conversationUser.id, 
+        content: newMessage,
+        tempId: tempId 
+      };
       socket.emit('privateMessage', payload);
-      setMessages(prev => [...prev, { senderId: currentUser.id, content: newMessage, createdAt: new Date().toISOString() }]);
+      setMessages(prev => [...prev, { id: tempId, senderId: currentUser.id, content: newMessage, createdAt: new Date().toISOString() }]);
       setNewMessage('');
       onNewMessageSent();
     }
+  };
+
+  const handleCopyId = (id: number) => {
+    // Não copia IDs temporários (negativos)
+    if (id > 0) {
+        navigator.clipboard.writeText(id.toString());
+    }
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (id: number) => {
+    // Não permite deletar mensagens que ainda não foram confirmadas pelo servidor
+    if (id < 0) {
+        setActiveMenu(null);
+        return;
+    }
+    const token = localStorage.getItem('silex_token');
+    try {
+      const res = await fetch(`${API_URL}/api/messages/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== id));
+      } else {
+        console.error("Failed to delete message");
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+    setActiveMenu(null);
   };
 
   return (
@@ -85,8 +144,18 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
         </button>
       </header>
       <div className="flex-1 p-4 md:px-6 lg:px-8 overflow-y-auto">
-        {messages.map((msg, index) => (
-          <div key={index} className="flex flex-col mb-2">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`group flex items-center gap-2 mb-2 ${msg.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}>
+            {msg.senderId === currentUser.id && (
+              <div className="relative">
+                <button onClick={() => setActiveMenu(activeMenu === msg.id ? null : msg.id)} className="opacity-0 group-hover:opacity-100 text-gray-400">
+                  <ChevronDownIcon className="h-4 w-4" />
+                </button>
+                {activeMenu === msg.id && (
+                  <MessageActions messageId={msg.id} onCopy={handleCopyId} onDelete={handleDelete} />
+                )}
+              </div>
+            )}
             <div className={`max-w-xl p-3 rounded-lg ${
                 msg.senderId === currentUser.id 
                 ? 'bg-indigo-600 self-end rounded-br-none' 

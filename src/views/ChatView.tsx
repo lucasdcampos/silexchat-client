@@ -25,6 +25,7 @@ interface Message {
   senderId: number;
   content: string;
   createdAt: string;
+  sender?: User;
 }
 
 interface ChatViewProps {
@@ -57,7 +58,7 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
 
     const handleMessageConfirmed = ({ tempId, message }: { tempId: number, message: Message }) => {
       setMessages(prev => 
-        prev.map(m => (m.id === tempId ? message : m))
+        prev.map(m => (m.id === tempId ? { ...message, sender: currentUser } : m))
       );
     };
     
@@ -85,7 +86,7 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
       socket.off('messageDeleted', handleMessageDeleted);
       socket.off('messageConfirmed', handleMessageConfirmed);
     };
-  }, [conversationUser.id, socket]);
+  }, [conversationUser.id, socket, currentUser]);
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,35 +148,58 @@ export function ChatView({ currentUser, conversationUser, socket, onNewMessageSe
           <XIcon className="h-5 w-5" />
         </button>
       </header>
-      <div className="flex-1 p-4 md:px-6 lg:px-8 overflow-y-auto">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`group flex items-center gap-2 mb-2 ${msg.senderId === currentUser.id ? 'justify-end' : 'justify-start'}`}>
-            {msg.senderId === currentUser.id && (
-              <div className="relative">
-                <button onClick={() => setActiveMenu(activeMenu === msg.id ? null : msg.id)} className="opacity-0 group-hover:opacity-100 text-gray-400">
-                  <ChevronDownIcon className="h-4 w-4" />
-                </button>
-                {activeMenu === msg.id && (
-                  <MessageActions messageId={msg.id} onCopy={handleCopyId} onDelete={handleDelete} />
+      <div className="flex-1 p-4 md:px-6 lg:px-8 overflow-y-auto overflow-x-hidden">
+        {messages.map((msg, index) => {
+          const isSender = msg.senderId === currentUser.id;
+          const showAvatar = !isSender && (index === 0 || messages[index-1].senderId !== msg.senderId);
+
+          return (
+            <div key={msg.id} className={`flex items-start gap-3 mb-1 ${isSender ? 'justify-end' : 'justify-start'}`}>
+              <div className="w-8 flex-shrink-0">
+                {showAvatar && msg.sender && (
+                  <button onClick={() => onOpenProfile(msg.sender!)} className="rounded-full">
+                    <Avatar avatarUrl={msg.sender.avatarUrl} username={msg.sender.username} size="sm" />
+                  </button>
                 )}
               </div>
-            )}
-            <div className={`max-w-xl p-3 rounded-lg ${
-                msg.senderId === currentUser.id 
-                ? 'bg-indigo-600 self-end rounded-br-none' 
-                : 'bg-gray-700 self-start rounded-bl-none'
-            }`}>
-                <ParsedMessage text={msg.content} />
-                <p className={`text-xs mt-1 text-right ${
-                    msg.senderId === currentUser.id 
-                    ? 'text-indigo-200' 
-                    : 'text-gray-400'
-                }`}>
-                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
+              
+              <div className={`flex flex-col ${isSender ? 'items-end' : 'items-start'}`}>
+                {showAvatar && msg.sender && (
+                  <button onClick={() => onOpenProfile(msg.sender!)} className="text-sm font-semibold text-gray-300 mb-1 ml-2 hover:underline">
+                    {msg.sender.username}
+                  </button>
+                )}
+                <div className={`group flex items-center gap-2 ${isSender ? 'flex-row-reverse' : 'flex-row'}`}>
+                  {isSender && (
+                    <div className="relative">
+                      <button onClick={() => setActiveMenu(activeMenu === msg.id ? null : msg.id)} className="opacity-0 group-hover:opacity-100 text-gray-400">
+                        <ChevronDownIcon className="h-4 w-4" />
+                      </button>
+                      {activeMenu === msg.id && (
+                        <MessageActions messageId={msg.id} onCopy={handleCopyId} onDelete={handleDelete} />
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className={`max-w-xl px-3 py-2 rounded-lg ${
+                      isSender 
+                      ? 'bg-indigo-600 rounded-br-none' 
+                      : 'bg-gray-700 rounded-bl-none'
+                  }`}>
+                      <div className="flex items-end gap-2">
+                        <ParsedMessage text={msg.content} />
+                        <span className={`text-xs flex-shrink-0 pb-0.5 ${
+                            isSender ? 'text-indigo-200' : 'text-gray-400'
+                        }`}>
+                            {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
       <footer className="p-4 border-t border-gray-700">

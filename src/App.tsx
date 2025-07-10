@@ -26,16 +26,8 @@ export default function App() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [profileModalUser, setProfileModalUser] = useState<User | null>(null); 
+  const [profileModalUserId, setProfileModalUserId] = useState<number | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
-
-  const handleOpenProfile = (user: User) => {
-    setProfileModalUser(user);
-  };
-
-  const handleCloseProfile = () => {
-    setProfileModalUser(null);
-  };
 
   const selectedConversationRef = useRef<Conversation | null>(null);
   useEffect(() => {
@@ -63,7 +55,13 @@ export default function App() {
     if (isAuthenticated && token) {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setCurrentUser({ id: payload.id, username: payload.username, avatarUrl: payload.avatarUrl });
+        setCurrentUser({ 
+          id: payload.id, 
+          username: payload.username, 
+          avatarUrl: payload.avatarUrl,
+          about: payload.about,
+          status: payload.status,
+        });
       } catch (e) {
         handleLogout();
         return;
@@ -83,6 +81,18 @@ export default function App() {
         updateConversationOrder(message.sender);
       });
 
+      newSocket.on('userStatusChange', ({ userId, status }) => {
+        setConversations(prev => 
+            prev.map(c => c.id === userId ? { ...c, status } : c)
+        );
+        setSelectedConversation(prev => 
+            prev && prev.id === userId ? { ...prev, status } : prev
+        );
+        setCurrentUser(prev => 
+            prev && prev.id === userId ? { ...prev, status } : prev
+        );
+      });
+
       const fetchConversations = async () => {
         try {
           const res = await fetch(`${API_URL}/api/users/conversations`, {
@@ -98,7 +108,10 @@ export default function App() {
       };
       fetchConversations();
 
-      return () => { newSocket.disconnect(); };
+      return () => { 
+        newSocket.off('userStatusChange');
+        newSocket.disconnect(); 
+      };
     }
   }, [isAuthenticated]);
 
@@ -165,7 +178,20 @@ export default function App() {
   const handleUpdateUser = (updatedUser: User, newToken: string) => {
     setCurrentUser(updatedUser);
     localStorage.setItem('silex_token', newToken);
-    setConversations(prev => prev.map(c => c.id === updatedUser.id ? { ...c, ...updatedUser } : c));
+    setConversations(prev =>
+      prev.map(c => c.id === updatedUser.id ? { ...c, ...updatedUser } : c)
+    );
+    setSelectedConversation(prev =>
+      prev && prev.id === updatedUser.id ? { ...prev, ...updatedUser } : prev
+    );
+  };
+
+  const handleOpenProfile = (user: User) => {
+    setProfileModalUserId(user.id);
+  };
+
+  const handleCloseProfile = () => {
+    setProfileModalUserId(null);
   };
 
   if (!isAuthenticated) {
@@ -214,7 +240,7 @@ export default function App() {
         />
       )}
       <ProfileModal 
-        user={profileModalUser}
+        userId={profileModalUserId}
         onClose={handleCloseProfile}
       />
     </div>

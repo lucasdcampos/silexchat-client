@@ -14,6 +14,8 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose, currentUser, onUpdateSuccess }: SettingsModalProps) {
   const [username, setUsername] = useState(currentUser.username);
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatarUrl || '');
+  const [about, setAbout] = useState(currentUser.about || '');
+  const [status, setStatus] = useState(currentUser.status || 'ONLINE');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,6 +23,8 @@ export function SettingsModal({ isOpen, onClose, currentUser, onUpdateSuccess }:
     if (isOpen) {
       setUsername(currentUser.username);
       setAvatarUrl(currentUser.avatarUrl || '');
+      setAbout(currentUser.about || '');
+      setStatus(currentUser.status || 'ONLINE');
       setError('');
     }
   }, [isOpen, currentUser]);
@@ -38,7 +42,7 @@ export function SettingsModal({ isOpen, onClose, currentUser, onUpdateSuccess }:
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ username, avatarUrl }),
+        body: JSON.stringify({ username, avatarUrl, about, status }),
       });
 
       const data = await res.json();
@@ -81,6 +85,28 @@ export function SettingsModal({ isOpen, onClose, currentUser, onUpdateSuccess }:
               required
               className="w-full mt-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-300">About</label>
+            <textarea
+              value={about}
+              onChange={e => setAbout(e.target.value)}
+              placeholder="Tell us about yourself..."
+              rows={3}
+              className="w-full mt-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+           <div>
+            <label className="text-sm font-medium text-gray-300">Status</label>
+            <select
+              value={status}
+              onChange={e => setStatus(e.target.value as 'ONLINE' | 'AFK' | 'OFFLINE')}
+              className="w-full mt-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="ONLINE">Online</option>
+              <option value="AFK">Away</option>
+              <option value="OFFLINE">Offline</option>
+            </select>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <div className="flex justify-end gap-4 pt-4">

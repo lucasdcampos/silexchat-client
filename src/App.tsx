@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { AuthPage } from './pages/AuthPage';
 import { WelcomeView } from './views/WelcomeView';
@@ -8,6 +8,8 @@ import type { Chat } from './models/chat';
 import { ChatView } from './views/ChatView';
 import { io, Socket } from 'socket.io-client';
 import type { Message } from './models/message';
+import { SettingsModal } from './views/SettingsModal';
+import { ProfileModal } from './views/ProfileModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -18,6 +20,13 @@ export default function App() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [profileModalData, setProfileModalData] = useState<User | Chat | null>(null);
+
+  const activeChatRef = useRef(activeChat);
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
 
   useEffect(() => {
     const token = localStorage.getItem('silex_token');
@@ -34,11 +43,30 @@ export default function App() {
       setSocket(newSocket);
 
       newSocket.on('chatMessage', (message: Message) => {
-        setChats(prev => {
-          const chatToUpdate = prev.find(c => c.id === message.chatId);
-          if (!chatToUpdate) return prev;
-          const otherChats = prev.filter(c => c.id !== message.chatId);
-          return [{ ...chatToUpdate, messages: [message], updatedAt: message.createdAt }, ...otherChats];
+        setChats(prevChats => {
+          const chatIndex = prevChats.findIndex(c => c.id === message.chatId);
+
+          if (chatIndex !== -1) {
+            const chatToUpdate = prevChats[chatIndex];
+            const otherChats = prevChats.filter(c => c.id !== message.chatId);
+            return [{ ...chatToUpdate, messages: [message], updatedAt: message.createdAt }, ...otherChats];
+          } else {
+            const fetchChatDetails = async () => {
+              try {
+                const res = await fetch(`${API_URL}/api/chats/${message.chatId}`, {
+                  headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                  const newChatData = await res.json();
+                  setChats(currentChats => [newChatData, ...currentChats.filter(c => c.id !== newChatData.id)]);
+                }
+              } catch (error) {
+                console.error("Error fetching details for hidden chat:", error);
+              }
+            };
+            fetchChatDetails();
+            return prevChats;
+          }
         });
       });
 
@@ -89,6 +117,53 @@ export default function App() {
     setActiveChat(newChat);
   };
 
+  const handleHideChat = async (chatId: number) => {
+    const token = localStorage.getItem('silex_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/chats/${chatId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        setChats(prev => prev.filter(c => c.id !== chatId));
+        if (activeChat?.id === chatId) {
+          setActiveChat(null);
+        }
+      } else {
+        console.error("Failed to hide chat on server");
+      }
+    } catch (error) {
+      console.error("Error hiding chat:", error);
+    }
+  };
+
+  const handleOpenProfile = (data: User | Chat) => {
+    setProfileModalData(data);
+  };
+
+  const handleCloseProfile = () => {
+    setProfileModalData(null);
+  };
+
+  const handleUpdateUser = (updatedUser: User, newToken: string) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('silex_token', newToken);
+    setChats(prev => prev.map(c => {
+      if (c.type === 'DM') {
+        const participantIndex = c.participants.findIndex(p => p.user.id === updatedUser.id);
+        if (participantIndex !== -1) {
+          const newParticipants = [...c.participants];
+          newParticipants[participantIndex].user = updatedUser;
+          return { ...c, participants: newParticipants };
+        }
+      }
+      return c;
+    }));
+  };
+
   if (!isAuthenticated) {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
@@ -102,6 +177,9 @@ export default function App() {
         onSelectChat={setActiveChat}
         onNewChat={() => setIsNewChatModalOpen(true)}
         onLogout={handleLogout}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onHideChat={handleHideChat}
+        onOpenProfile={handleOpenProfile}
       />
       <main className="flex-1 flex flex-col">
         {activeChat && currentUser && socket ? (
@@ -110,6 +188,7 @@ export default function App() {
             currentUser={currentUser}
             socket={socket}
             onClose={() => setActiveChat(null)}
+            onOpenProfile={handleOpenProfile}
           />
         ) : (
           <WelcomeView />
@@ -120,6 +199,20 @@ export default function App() {
         onClose={() => setIsNewChatModalOpen(false)}
         onChatStarted={handleChatStarted}
       />
+      {currentUser && (
+        <SettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          currentUser={currentUser}
+          onUpdateSuccess={handleUpdateUser}
+        />
+      )}
+
+      <ProfileModal 
+        data={profileModalData}
+        onClose={handleCloseProfile}
+      />
+      
     </div>
   );
 }

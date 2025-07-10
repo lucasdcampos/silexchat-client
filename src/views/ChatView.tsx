@@ -12,7 +12,9 @@ const getChatDisplayData = (chat: Chat, currentUserId: number) => {
   if (chat.type === 'GROUP') {
     return { name: chat.name, avatarUrl: chat.avatarUrl };
   }
+  
   const otherParticipant = chat.participants.find(p => p.user.id !== currentUserId);
+
   return {
     name: otherParticipant?.user.username,
     avatarUrl: otherParticipant?.user.avatarUrl,
@@ -24,13 +26,24 @@ interface ChatViewProps {
   currentUser: User;
   socket: Socket | null;
   onClose: () => void;
+  onOpenProfile: (user: User | Chat) => void;
 }
 
-export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) {
+export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const displayData = getChatDisplayData(chat, currentUser.id);
+
+  const handleHeaderClick = () => {
+    if (chat.type === 'GROUP') {
+      onOpenProfile(chat);
+    } else {
+      const otherUser = chat.participants.find(p => p.user.id !== currentUser.id)?.user;
+      if (otherUser) onOpenProfile(otherUser);
+    }
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -52,14 +65,14 @@ export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) 
     fetchHistory();
 
     const handleChatMessage = (message: Message) => {
-      if (message.chatId === chat.id && message.senderId !== currentUser.id) {
+      if (message.chatId === chat.id) {
         setMessages(prev => [...prev, message]);
       }
     };
 
     const handleMessageConfirmed = ({ tempId, message }: { tempId: number, message: Message }) => {
       setMessages(prev => 
-        prev.map(m => (m.id === tempId ? message : m))
+        prev.map(m => (m.id === tempId ? { ...message, sender: currentUser } : m))
       );
     };
 
@@ -70,7 +83,7 @@ export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) 
       socket.off('chatMessage', handleChatMessage);
       socket.off('messageConfirmed', handleMessageConfirmed);
     };
-  }, [chat.id, socket, currentUser.id]);
+  }, [chat.id, socket, currentUser]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -80,6 +93,12 @@ export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) 
     e.preventDefault();
     if (newMessage.trim() && socket) {
       const tempId = -Math.random();
+      socket.emit('chatMessage', {
+        chatId: chat.id,
+        content: newMessage,
+        tempId: tempId,
+      });
+      
       const temporaryMessage: Message = {
         id: tempId,
         senderId: currentUser.id,
@@ -88,14 +107,7 @@ export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) 
         chatId: chat.id,
         sender: currentUser,
       };
-      
       setMessages(prev => [...prev, temporaryMessage]);
-
-      socket.emit('chatMessage', {
-        chatId: chat.id,
-        content: newMessage,
-        tempId: tempId,
-      });
       setNewMessage('');
     }
   };
@@ -103,10 +115,10 @@ export function ChatView({ chat, currentUser, socket, onClose }: ChatViewProps) 
   return (
     <div className="flex flex-col h-full">
       <header className="p-4 border-b border-gray-700 flex justify-between items-center">
-        <div className="flex items-center gap-3">
+        <button onClick={handleHeaderClick} className="flex items-center gap-3 p-1 rounded-md hover:bg-gray-700">
           <Avatar avatarUrl={displayData.avatarUrl} username={displayData.name} />
           <h2 className="text-xl font-semibold">{displayData.name}</h2>
-        </div>
+        </button>
         <button onClick={onClose} className="p-1 text-gray-400 hover:text-white">&times;</button>
       </header>
       <div className="flex-1 p-4 overflow-y-auto">

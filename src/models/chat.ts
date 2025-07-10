@@ -10,4 +10,6 @@ export interface Chat {
   updatedAt: string;
   participants: { user: User }[];
   messages: { content: string }[];
+  inviteCode?: string;
+  createdAt: Date;
 }

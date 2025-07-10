@@ -105,7 +105,6 @@ export function SettingsModal({ isOpen, onClose, currentUser, onUpdateSuccess }:
             >
               <option value="ONLINE">Online</option>
               <option value="AFK">Away</option>
-              <option value="OFFLINE">Offline</option>
             </select>
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}

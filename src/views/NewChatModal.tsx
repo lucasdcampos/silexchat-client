@@ -1,42 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import type { Conversation, User } from '../models/user';
+import type { Chat } from '../models/chat';
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface NewChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onStartChat: (user: Conversation) => void;
+  onChatStarted: (chat: Chat) => void;
 }
 
-export function NewChatModal({ isOpen, onClose, onStartChat }: NewChatModalProps) {
+export function NewChatModal({ isOpen, onClose, onChatStarted }: NewChatModalProps) {
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (isOpen) {
-      const fetchUsers = async () => {
-        const token = localStorage.getItem('silex_token');
-        const res = await fetch(`${API_URL}/api/users/users`, { headers: { 'Authorization': `Bearer ${token}` } });
-        const data = await res.json();
-        if (res.ok) setAllUsers(data);
-      };
-      fetchUsers();
-    }
-  }, [isOpen]);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetUser = allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
-    if (targetUser) {
-      onStartChat({ ...targetUser, unreadCount: 0 });
+    setLoading(true);
+    setError('');
+
+    const token = localStorage.getItem('silex_token');
+    try {
+      const res = await fetch(`${API_URL}/api/chats/dm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ partnerUsername: username }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to start chat.');
+
+      onChatStarted(data);
       onClose();
-      setUsername('');
-      setError('');
-    } else {
-      setError(`User "${username}" not found.`);
+
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) {
+      setUsername('');
+      setError('');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -55,8 +67,10 @@ export function NewChatModal({ isOpen, onClose, onStartChat }: NewChatModalProps
           />
           {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
           <div className="flex justify-end gap-4 mt-6">
-            <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700">Cancel</button>
-            <button type="submit" className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700">Chat</button>
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-300 hover:bg-gray-700" disabled={loading}>Cancel</button>
+            <button type="submit" className="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700" disabled={loading}>
+              {loading ? 'Starting...' : 'Chat'}
+            </button>
           </div>
         </form>
       </div>

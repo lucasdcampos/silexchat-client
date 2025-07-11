@@ -12,4 +12,5 @@ export interface Chat {
   messages: { content: string }[];
   inviteCode?: string;
   createdAt: Date;
+  ownerId?: number | null;
 }

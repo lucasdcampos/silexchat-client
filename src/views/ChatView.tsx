@@ -2,24 +2,26 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import type { User } from '../models/user';
 import { ParsedMessage } from '../components/ParsedMessage';
+import { MessageActions } from '../MessageActions';
 import { Avatar } from '../components/Avatar';
 import type { Message } from '../models/message';
 import type { Chat } from '../models/chat';
+import { getChatDisplayData } from '../utils';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const getChatDisplayData = (chat: Chat, currentUserId: number) => {
-  if (chat.type === 'GROUP') {
-    return { name: chat.name, avatarUrl: chat.avatarUrl };
-  }
-  
-  const otherParticipant = chat.participants.find(p => p.user.id !== currentUserId);
+const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
+    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+);
 
-  return {
-    name: otherParticipant?.user.username,
-    avatarUrl: otherParticipant?.user.avatarUrl,
-  };
-};
+const ChevronDownIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
 
 interface ChatViewProps {
   chat: Chat;
@@ -32,8 +34,10 @@ interface ChatViewProps {
 export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: ChatViewProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [activeMenu, setActiveMenu] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
+  
   const displayData = getChatDisplayData(chat, currentUser.id);
 
   const handleHeaderClick = () => {
@@ -49,6 +53,7 @@ export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: 
     if (!socket) return;
 
     const fetchHistory = async () => {
+      setLoading(true);
       const token = localStorage.getItem('silex_token');
       try {
         const res = await fetch(`${API_URL}/api/messages/${chat.id}`, {
@@ -60,6 +65,8 @@ export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: 
         }
       } catch (error) {
         console.error('Failed to fetch chat history', error);
+      } finally {
+        setLoading(false);
       }
     };
     fetchHistory();
@@ -112,6 +119,35 @@ export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: 
     }
   };
 
+  const handleCopyId = (id: number) => {
+    if (id > 0) {
+        navigator.clipboard.writeText(id.toString());
+    }
+    setActiveMenu(null);
+  };
+
+  const handleDelete = async (id: number) => {
+    if (id < 0) {
+        setActiveMenu(null);
+        return;
+    }
+    const token = localStorage.getItem('silex_token');
+    try {
+      const res = await fetch(`${API_URL}/api/messages/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setMessages(prev => prev.filter(m => m.id !== id));
+      } else {
+        console.error("Failed to delete message");
+      }
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+    setActiveMenu(null);
+  };
+
   return (
     <div className="flex flex-col h-full">
       <header className="p-4 border-b border-gray-700 flex justify-between items-center">
@@ -119,45 +155,70 @@ export function ChatView({ chat, currentUser, socket, onClose, onOpenProfile }: 
           <Avatar avatarUrl={displayData.avatarUrl} username={displayData.name} />
           <h2 className="text-xl font-semibold">{displayData.name}</h2>
         </button>
-        <button onClick={onClose} className="p-1 text-gray-400 hover:text-white">&times;</button>
+        <button onClick={onClose} className="p-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded-full transition-colors">
+          <XIcon className="h-5 w-5" />
+        </button>
       </header>
-      <div className="flex-1 p-4 overflow-y-auto">
-        {messages.map((msg, index) => {
-          const isSender = msg.senderId === currentUser.id;
-          const showHeader = !isSender && (index === 0 || messages[index - 1].senderId !== msg.senderId);
+      <div className="flex-1 p-4 md:px-6 lg:px-8 overflow-y-auto overflow-x-hidden">
+        {loading ? (
+          <div className="flex justify-center items-center h-full">
+            <p className="text-gray-500">Loading messages...</p>
+          </div>
+        ) : (
+          messages.map((msg, index) => {
+            const isSender = msg.senderId === currentUser.id;
+            const showHeader = !isSender && (index === 0 || messages[index - 1].senderId !== msg.senderId);
 
-          return (
-            <div key={msg.id} className={`flex items-start gap-3 ${isSender ? 'justify-end' : 'justify-start'} ${showHeader ? 'mt-4' : 'mt-1'}`}>
-              <div className="w-8 flex-shrink-0">
-                {showHeader && (
-                  <Avatar avatarUrl={msg.sender?.avatarUrl} username={msg.sender?.username} size="sm" />
-                )}
-              </div>
-              
-              <div className={`flex flex-col ${isSender ? 'items-end' : 'items-start'}`}>
-                {showHeader && (
-                  <span className="text-sm font-semibold text-gray-300 mb-1 ml-2">{msg.sender?.username}</span>
-                )}
-                <div className={`max-w-lg p-3 rounded-lg ${
-                    isSender 
-                    ? 'bg-indigo-600' 
-                    : 'bg-gray-700'
-                }`}>
-                    <div className="flex items-end gap-2">
-                      <div className="min-w-0">
-                        <ParsedMessage text={msg.content} />
+            return (
+              <div key={msg.id} className={`flex items-start gap-3 ${isSender ? 'justify-end' : 'justify-start'} ${showHeader ? 'mt-4' : 'mt-1'}`}>
+                <div className="w-8 flex-shrink-0">
+                  {showHeader && msg.sender && (
+                    <button onClick={() => onOpenProfile(msg.sender!)} className="rounded-full">
+                      <Avatar avatarUrl={msg.sender.avatarUrl} username={msg.sender.username} size="sm" />
+                    </button>
+                  )}
+                </div>
+                
+                <div className={`flex flex-col ${isSender ? 'items-end' : 'items-start'}`}>
+                  {showHeader && msg.sender && (
+                    <button onClick={() => onOpenProfile(msg.sender!)} className="text-sm font-semibold text-gray-300 mb-1 ml-2 hover:underline">
+                      {msg.sender.username}
+                    </button>
+                  )}
+                  <div className={`group flex items-center gap-2 ${isSender ? 'flex-row-reverse' : 'flex-row'}`}>
+                    {isSender && (
+                      <div className="relative">
+                        <button onClick={() => setActiveMenu(activeMenu === msg.id ? null : msg.id)} className="opacity-0 group-hover:opacity-100 text-gray-400">
+                          <ChevronDownIcon className="h-4 w-4" />
+                        </button>
+                        {activeMenu === msg.id && (
+                          <MessageActions messageId={msg.id} onCopy={handleCopyId} onDelete={handleDelete} />
+                        )}
                       </div>
-                      <span className={`text-xs flex-shrink-0 pb-0.5 ${
-                          isSender ? 'text-indigo-200' : 'text-gray-400'
-                      }`}>
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    )}
+                    
+                    <div className={`max-w-lg p-3 rounded-lg ${
+                        isSender 
+                        ? 'bg-indigo-600' 
+                        : 'bg-gray-700'
+                    }`}>
+                        <div className="flex items-end gap-2">
+                          <div className="min-w-0">
+                            <ParsedMessage text={msg.content} />
+                          </div>
+                          <span className={`text-xs flex-shrink-0 pb-0.5 ${
+                              isSender ? 'text-indigo-200' : 'text-gray-400'
+                          }`}>
+                              {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                     </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
       <footer className="p-4 border-t border-gray-700">

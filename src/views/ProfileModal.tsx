@@ -1,6 +1,6 @@
-import { Avatar } from "../components/Avatar";
-import type { User } from "../models/user";
-import type { Chat } from "../models/chat";
+import type { User } from '../models/user';
+import type { Chat } from '../models/chat';
+import { Avatar } from '../components/Avatar';
 
 const StatusIndicator = ({ status }: { status?: string }) => {
   const statusClasses = {
@@ -14,13 +14,17 @@ const StatusIndicator = ({ status }: { status?: string }) => {
 
 interface ProfileModalProps {
   data: User | Chat | null;
+  currentUser: User | null;
   onClose: () => void;
+  onOpenGroupSettings: (chat: Chat) => void;
 }
 
-export function ProfileModal({ data, onClose }: ProfileModalProps) {
+export function ProfileModal({ data, currentUser, onClose, onOpenGroupSettings }: ProfileModalProps) {
   if (!data) return null;
 
   const isGroup = 'type' in data && data.type === 'GROUP';
+  const isOwner = isGroup && (data as Chat).ownerId === currentUser?.id;
+  
   const displayData = {
     name: isGroup ? (data as Chat).name : (data as User).username,
     avatarUrl: data.avatarUrl,
@@ -55,9 +59,19 @@ export function ProfileModal({ data, onClose }: ProfileModalProps) {
               <p className="text-sm text-gray-300 break-words">{(data as User).about || 'No information available.'}</p>
             </div>
           )}
+           <div>
+            <h3 className="text-xs font-bold text-gray-400 uppercase mb-1">Created At</h3>
+            <p className="text-sm text-gray-300">{new Date(data.createdAt!).toLocaleDateString()}</p>
+          </div>
         </div>
 
-        <button onClick={onClose} className="mt-8 w-full px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700">
+        {isOwner && (
+          <button onClick={() => onOpenGroupSettings(data as Chat)} className="mt-4 w-full px-4 py-2 rounded-md bg-gray-600 hover:bg-gray-700">
+            Edit Group
+          </button>
+        )}
+
+        <button onClick={onClose} className="mt-2 w-full px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-700">
           Close
         </button>
       </div>

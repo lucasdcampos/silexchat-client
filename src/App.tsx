@@ -1,17 +1,26 @@
-import { useState, useEffect, useRef } from 'react';
-import { Sidebar } from './components/Sidebar';
-import { AuthPage } from './pages/AuthPage';
-import { WelcomeView } from './views/WelcomeView';
-import { NewChatModal } from './views/NewChatModal';
-import type { User } from './models/user';
-import type { Chat } from './models/chat';
-import { ChatView } from './views/ChatView';
-import { io, Socket } from 'socket.io-client';
-import type { Message } from './models/message';
-import { SettingsModal } from './views/SettingsModal';
-import { ProfileModal } from './views/ProfileModal';
+import { useEffect, useRef, useState } from "react";
+import type { Chat } from "./models/chat";
+import type { User } from "./models/user";
+import { io, type Socket } from "socket.io-client";
+import { Sidebar } from "./components/Sidebar";
+import { AuthPage } from "./pages/AuthPage";
+import { NewChatModal } from "./views/NewChatModal";
+import { WelcomeView } from "./views/WelcomeView";
+import { ChatView } from "./views/ChatView";
+import { ProfileModal } from "./views/ProfileModal";
+import { SettingsModal } from "./views/SettingsModal";
+import { GroupSettingsModal } from "./views/GroupSettingsModal";
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+interface MessageWithSender {
+  id: number;
+  senderId: number;
+  chatId: number;
+  content: string;
+  createdAt: string;
+  sender: User; 
+}
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('silex_token'));
@@ -19,9 +28,11 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [profileModalData, setProfileModalData] = useState<User | Chat | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [groupSettingsModalChat, setGroupSettingsModalChat] = useState<Chat | null>(null);
+  const [isChatsLoading, setIsChatsLoading] = useState(true);
 
   const activeChatRef = useRef(activeChat);
   useEffect(() => {
@@ -30,48 +41,31 @@ export default function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('silex_token');
-    if (isAuthenticated && token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setCurrentUser(payload);
-      } catch (e) {
-        handleLogout();
-        return;
+    if (!isAuthenticated || !token) {
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
       }
+      return;
+    }
 
-      const newSocket = io(API_URL, { auth: { token } });
-      setSocket(newSocket);
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setCurrentUser(payload);
+    } catch (e) {
+      handleLogout();
+      return;
+    }
 
-      newSocket.on('chatMessage', (message: Message) => {
-        setChats(prevChats => {
-          const chatIndex = prevChats.findIndex(c => c.id === message.chatId);
+    const newSocket = io(API_URL, { auth: { token } });
+    setSocket(newSocket);
 
-          if (chatIndex !== -1) {
-            const chatToUpdate = prevChats[chatIndex];
-            const otherChats = prevChats.filter(c => c.id !== message.chatId);
-            return [{ ...chatToUpdate, messages: [message], updatedAt: message.createdAt }, ...otherChats];
-          } else {
-            const fetchChatDetails = async () => {
-              try {
-                const res = await fetch(`${API_URL}/api/chats/${message.chatId}`, {
-                  headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                  const newChatData = await res.json();
-                  setChats(currentChats => [newChatData, ...currentChats.filter(c => c.id !== newChatData.id)]);
-                }
-              } catch (error) {
-                console.error("Error fetching details for hidden chat:", error);
-              }
-            };
-            fetchChatDetails();
-            return prevChats;
-          }
-        });
-      });
-
+    const onConnect = () => {
+      console.log('Socket connected, fetching initial data...');
+      
       const fetchChats = async () => {
         try {
+          setIsChatsLoading(true);
           const res = await fetch(`${API_URL}/api/chats`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -81,15 +75,51 @@ export default function App() {
           }
         } catch (error) {
           console.error("Error fetching chats:", error);
+        } finally {
+          setIsChatsLoading(false);
         }
       };
       fetchChats();
+    };
 
-      return () => {
-        newSocket.off('chatMessage');
-        newSocket.disconnect();
-      };
-    }
+    const onChatMessage = (message: MessageWithSender) => {
+      setChats(prev => {
+        const chatToUpdate = prev.find(c => c.id === message.chatId);
+        if (!chatToUpdate) return prev;
+        const otherChats = prev.filter(c => c.id !== message.chatId);
+        return [{ ...chatToUpdate, messages: [message], updatedAt: message.createdAt }, ...otherChats];
+      });
+    };
+
+    const onUserStatusChange = ({ userId, status }: { userId: number, status: string }) => {
+      setChats(prev => 
+          prev.map(c => {
+            if (c.type === 'DM') {
+              const participantIndex = c.participants.findIndex(p => p.user.id === userId);
+              if (participantIndex !== -1) {
+                const newParticipants = [...c.participants];
+                newParticipants[participantIndex].user.status = status as any;
+                return { ...c, participants: newParticipants };
+              }
+            }
+            return c;
+          })
+      );
+      setCurrentUser(prev => 
+          prev && prev.id === userId ? { ...prev, status: status as any } : prev
+      );
+    };
+
+    newSocket.on('connect', onConnect);
+    newSocket.on('chatMessage', onChatMessage);
+    newSocket.on('userStatusChange', onUserStatusChange);
+
+    return () => { 
+      newSocket.off('connect', onConnect);
+      newSocket.off('chatMessage', onChatMessage);
+      newSocket.off('userStatusChange', onUserStatusChange);
+      newSocket.disconnect(); 
+    };
   }, [isAuthenticated]);
 
   const handleLoginSuccess = () => {
@@ -116,7 +146,7 @@ export default function App() {
     });
     setActiveChat(newChat);
   };
-
+  
   const handleHideChat = async (chatId: number) => {
     const token = localStorage.getItem('silex_token');
     if (!token) return;
@@ -140,6 +170,22 @@ export default function App() {
     }
   };
 
+  const handleUpdateUser = (updatedUser: User, newToken: string) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('silex_token', newToken);
+    setChats(prev => prev.map(c => {
+        if(c.type === 'DM') {
+            const participantIndex = c.participants.findIndex(p => p.user.id === updatedUser.id);
+            if(participantIndex > -1) {
+                const newParticipants = [...c.participants];
+                newParticipants[participantIndex].user = { ...newParticipants[participantIndex].user, ...updatedUser };
+                return { ...c, participants: newParticipants };
+            }
+        }
+        return c;
+    }));
+  };
+
   const handleOpenProfile = (data: User | Chat) => {
     setProfileModalData(data);
   };
@@ -148,37 +194,38 @@ export default function App() {
     setProfileModalData(null);
   };
 
-  const handleUpdateUser = (updatedUser: User, newToken: string) => {
-    setCurrentUser(updatedUser);
-    localStorage.setItem('silex_token', newToken);
-    setChats(prev => prev.map(c => {
-      if (c.type === 'DM') {
-        const participantIndex = c.participants.findIndex(p => p.user.id === updatedUser.id);
-        if (participantIndex !== -1) {
-          const newParticipants = [...c.participants];
-          newParticipants[participantIndex].user = updatedUser;
-          return { ...c, participants: newParticipants };
-        }
-      }
-      return c;
-    }));
-  };
-
   if (!isAuthenticated) {
     return <AuthPage onLoginSuccess={handleLoginSuccess} />;
   }
 
+  const handleOpenGroupSettings = (chat: Chat) => {
+    setProfileModalData(null);
+    setGroupSettingsModalChat(chat);
+  };
+
+  const handleCloseGroupSettings = () => {
+    setGroupSettingsModalChat(null);
+  };
+
+  const handleUpdateGroup = (updatedChat: Chat) => {
+    setChats(prev => prev.map(c => c.id === updatedChat.id ? updatedChat : c));
+    if (activeChat?.id === updatedChat.id) {
+      setActiveChat(updatedChat);
+    }
+  };
+
   return (
     <div className="flex h-screen w-screen bg-gray-900 text-white font-sans">
       <Sidebar
+        isChatsLoading={isChatsLoading}
         currentUser={currentUser}
         chats={chats}
         activeChatId={activeChat?.id}
         onSelectChat={setActiveChat}
         onNewChat={() => setIsNewChatModalOpen(true)}
         onLogout={handleLogout}
-        onOpenSettings={() => setIsSettingsModalOpen(true)}
         onHideChat={handleHideChat}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProfile={handleOpenProfile}
       />
       <main className="flex-1 flex flex-col">
@@ -207,12 +254,20 @@ export default function App() {
           onUpdateSuccess={handleUpdateUser}
         />
       )}
-
       <ProfileModal 
         data={profileModalData}
+        currentUser={currentUser}
         onClose={handleCloseProfile}
+        onOpenGroupSettings={handleOpenGroupSettings}
       />
-      
-    </div>
+      {groupSettingsModalChat && (
+        <GroupSettingsModal
+          isOpen={!!groupSettingsModalChat}
+          onClose={handleCloseGroupSettings}
+          chat={groupSettingsModalChat}
+          onUpdateSuccess={handleUpdateGroup}
+        />
+      )}
+      </div>
   );
 }
